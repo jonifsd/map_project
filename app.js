@@ -6,10 +6,26 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
 }).addTo(map);
 
-// פונקציה לשמירה של מיקום והערה ב-Local Storage
-function saveLocation(lat, lng, note) {
+// פונקציה לגיאוקודינג של מיקום (Lat/Lng) לכתובת
+function reverseGeocode(lat, lng, callback) {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`;
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const address = data && data.address ? `${data.address.road || ''}, ${data.address.city || ''}, ${data.address.country || ''}`.trim() : 'כתובת לא ידועה';
+            callback(address);
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            callback('שגיאה בקבלת הכתובת');
+        });
+}
+
+// פונקציה לשמירה של מיקום, כתובת והערה ב-Local Storage
+function saveLocation(lat, lng, address, note) {
     let locations = JSON.parse(localStorage.getItem('locations')) || [];
-    locations.push({ lat, lng, note });
+    locations.push({ lat, lng, address, note });
     localStorage.setItem('locations', JSON.stringify(locations));
 }
 
@@ -22,7 +38,10 @@ function updateLocationList() {
     locations.forEach((location, index) => {
         const listItem = document.createElement('div');
         listItem.className = 'location-item';
-        listItem.textContent = `${index + 1}: ${location.note || "ללא הערה"}`;
+        listItem.innerHTML = `
+            <strong>${index + 1}: ${location.note || "ללא הערה"}</strong><br>
+            כתובת: ${location.address || "לא ידוע"}
+        `;
         listItem.addEventListener('click', function() {
             map.setView([location.lat, location.lng], 13);
             L.marker([location.lat, location.lng]).addTo(map)
@@ -56,18 +75,20 @@ map.on('click', function(e) {
     // בקשה להוספת הערה עם חלון קופץ
     const popupContent = prompt("הכנס הערה למיקום זה:");
 
-    // בדיקה אם המשתמש הכניס הערה או לחיצה על ביטול
-    if (popupContent) {
-        // שמירת המיקום וההערה ב-Local Storage
-        saveLocation(lat, lng, popupContent);
+    // גיאוקודינג של המיקום לכתובת
+    reverseGeocode(lat, lng, (address) => {
+        if (popupContent) {
+            // שמירת המיקום, הכתובת וההערה ב-Local Storage
+            saveLocation(lat, lng, address, popupContent);
 
-        // הוספת סימון על המפה
-        const marker = L.marker([lat, lng]).addTo(map);
-        marker.bindPopup(popupContent).openPopup();
+            // הוספת סימון על המפה
+            const marker = L.marker([lat, lng]).addTo(map);
+            marker.bindPopup(popupContent).openPopup();
 
-        // עדכון הרשימה עם המיקום החדש
-        updateLocationList();
-    }
+            // עדכון הרשימה עם המיקום החדש
+            updateLocationList();
+        }
+    });
 });
 
 // פונקציה לביצוע גיאוקודינג של כתובת
@@ -85,14 +106,17 @@ function geocodeAddress(address, note) {
                 const marker = L.marker([lat, lng]).addTo(map);
                 marker.bindPopup(note || "כתובת: " + address).openPopup();
 
-                // שמירת המיקום וההערה ב-Local Storage
-                saveLocation(lat, lng, note);
+                // גיאוקודינג של המיקום כדי לקבל כתובת
+                reverseGeocode(lat, lng, (resolvedAddress) => {
+                    // שמירת המיקום, הכתובת וההערה ב-Local Storage
+                    saveLocation(lat, lng, resolvedAddress, note);
 
-                // מרכז את המפה לסימון
-                map.setView([lat, lng], 13);
+                    // מרכז את המפה לסימון
+                    map.setView([lat, lng], 13);
 
-                // עדכון הרשימה עם המיקום החדש
-                updateLocationList();
+                    // עדכון הרשימה עם המיקום החדש
+                    updateLocationList();
+                });
             } else {
                 alert("לא נמצא מיקום לכתובת זו.");
             }
