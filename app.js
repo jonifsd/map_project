@@ -22,11 +22,50 @@ function reverseGeocode(lat, lng, callback) {
         });
 }
 
+// פונקציה לחיפוש כתובת ומיקום על המפה
+function searchAddress(address) {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.length > 0) {
+                const lat = data[0].lat;
+                const lng = data[0].lon;
+                
+                // מיקום את המפה על הכתובת ומבצע זום
+                map.setView([lat, lng], 16);
+                
+                // הוספת סימון על המפה
+                L.marker([lat, lng]).addTo(map)
+                    .bindPopup(address).openPopup();
+                
+                // עדכון הרשימה עם הכתובת החדש
+                updateLocationList();
+            } else {
+                alert("לא נמצא מיקום לכתובת זו.");
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            alert("שגיאה בחיפוש הכתובת.");
+        });
+}
+
 // פונקציה לשמירה של מיקום, כתובת והערה ב-Local Storage
 function saveLocation(lat, lng, address, note) {
     let locations = JSON.parse(localStorage.getItem('locations')) || [];
     locations.push({ lat, lng, address, note });
     localStorage.setItem('locations', JSON.stringify(locations));
+}
+
+// פונקציה למחיקת מיקום מה-Local Storage
+function deleteLocation(index) {
+    let locations = JSON.parse(localStorage.getItem('locations')) || [];
+    locations.splice(index, 1); // הסרת המיקום מהרשימה
+    localStorage.setItem('locations', JSON.stringify(locations));
+    updateLocationList(); // עדכון הרשימה
+    loadLocations(); // טעינת המיקומים מחדש למפה
 }
 
 // פונקציה לעדכון הרשימה עם המיקומים ששמרנו
@@ -41,6 +80,7 @@ function updateLocationList() {
         listItem.innerHTML = `
             <strong>${index + 1}: ${location.note || "ללא הערה"}</strong><br>
             כתובת: ${location.address || "לא ידוע"}
+            <button class="delete-btn" data-index="${index}">מחק</button>
         `;
         listItem.addEventListener('click', function() {
             map.setView([location.lat, location.lng], 13);
@@ -49,11 +89,27 @@ function updateLocationList() {
         });
         listContainer.appendChild(listItem);
     });
+
+    // הוספת אירועי הקלקה על כפתור המחיקה
+    document.querySelectorAll('.delete-btn').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.stopPropagation(); // עצור את התפשטות הקלקה על אלמנטים אחרים
+            const index = button.getAttribute('data-index');
+            if (confirm("האם אתה בטוח שברצונך למחוק את המיקום הזה?")) {
+                deleteLocation(index);
+            }
+        });
+    });
 }
 
 // פונקציה לטעינת המיקומים מה-Local Storage
 function loadLocations() {
     let locations = JSON.parse(localStorage.getItem('locations')) || [];
+    map.eachLayer(layer => {
+        if (layer instanceof L.Marker) {
+            map.removeLayer(layer); // הסרת כל הסימונים הקיימים במפה
+        }
+    });
     locations.forEach(location => {
         L.marker([location.lat, location.lng]).addTo(map)
             .bindPopup(location.note || "אין הערה").openPopup();
@@ -91,42 +147,6 @@ map.on('click', function(e) {
     });
 });
 
-// פונקציה לביצוע גיאוקודינג של כתובת
-function geocodeAddress(address, note) {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
-    
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            if (data && data.length > 0) {
-                const lat = data[0].lat;
-                const lng = data[0].lon;
-                
-                // הוספת הסימון על המפה
-                const marker = L.marker([lat, lng]).addTo(map);
-                marker.bindPopup(note || "כתובת: " + address).openPopup();
-
-                // גיאוקודינג של המיקום כדי לקבל כתובת
-                reverseGeocode(lat, lng, (resolvedAddress) => {
-                    // שמירת המיקום, הכתובת וההערה ב-Local Storage
-                    saveLocation(lat, lng, resolvedAddress, note);
-
-                    // מרכז את המפה לסימון
-                    map.setView([lat, lng], 13);
-
-                    // עדכון הרשימה עם המיקום החדש
-                    updateLocationList();
-                });
-            } else {
-                alert("לא נמצא מיקום לכתובת זו.");
-            }
-        })
-        .catch(error => {
-            console.error("Error:", error);
-            alert("שגיאה בחיפוש הכתובת.");
-        });
-}
-
 // טיפול בלחיצה על כפתור "סמן על המפה"
 document.getElementById('geocode-btn').addEventListener('click', function() {
     const address = document.getElementById('address-input').value;
@@ -136,6 +156,17 @@ document.getElementById('geocode-btn').addEventListener('click', function() {
         geocodeAddress(address, note);
     } else {
         alert("אנא הכנס כתובת.");
+    }
+});
+
+// טיפול בכפתור לחיפוש כתובת
+document.getElementById('search-btn').addEventListener('click', function() {
+    const searchAddressInput = document.getElementById('search-input').value;
+    
+    if (searchAddressInput) {
+        searchAddress(searchAddressInput);
+    } else {
+        alert("אנא הכנס כתובת לחיפוש.");
     }
 });
 
