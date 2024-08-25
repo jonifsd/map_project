@@ -22,7 +22,7 @@ function reverseGeocode(lat, lng, callback) {
         });
 }
 
-// פונקציה לחיפוש כתובת ומיקום על המפה
+// פונקציה לחיפוש כתובת ומיקום על המפה עם תוצאות מרובות
 function searchAddress(address) {
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
     
@@ -30,18 +30,7 @@ function searchAddress(address) {
         .then(response => response.json())
         .then(data => {
             if (data && data.length > 0) {
-                const lat = data[0].lat;
-                const lng = data[0].lon;
-                
-                // מיקום את המפה על הכתובת ומבצע זום
-                map.setView([lat, lng], 16);
-                
-                // הוספת סימון על המפה
-                L.marker([lat, lng]).addTo(map)
-                    .bindPopup(address).openPopup();
-                
-                // עדכון הרשימה עם הכתובת החדש
-                updateLocationList();
+                showSearchResults(data); // הצגת תוצאות החיפוש למשתמש
             } else {
                 alert("לא נמצא מיקום לכתובת זו.");
             }
@@ -50,6 +39,44 @@ function searchAddress(address) {
             console.error("Error:", error);
             alert("שגיאה בחיפוש הכתובת.");
         });
+}
+
+// פונקציה להציג תוצאות חיפוש למשתמש ולבחור תוצאה
+function showSearchResults(results) {
+    const listContainer = document.getElementById('location-list');
+    listContainer.innerHTML = ''; // ניקוי הרשימה
+
+    results.forEach((result, index) => {
+        const listItem = document.createElement('div');
+        listItem.className = 'location-item';
+        listItem.innerHTML = `
+            <strong>${index + 1}: ${result.display_name}</strong><br>
+            <button class="select-btn" data-lat="${result.lat}" data-lng="${result.lon}" data-index="${index}">בחר</button>
+        `;
+        listContainer.appendChild(listItem);
+    });
+
+    // הוספת אירועי הקלקה על כפתור הבחירה
+    document.querySelectorAll('.select-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const lat = button.getAttribute('data-lat');
+            const lng = button.getAttribute('data-lng');
+            const address = button.parentElement.querySelector('strong').textContent;
+            const note = prompt("הכנס הערה למיקום זה:");
+
+            if (note) {
+                // שמירה והוספת סימון על המפה
+                saveLocation(lat, lng, address, note);
+                map.setView([lat, lng], 16);
+
+                L.marker([lat, lng]).addTo(map)
+                    .bindPopup(note).openPopup();
+
+                // עדכון הרשימה
+                updateLocationList();
+            }
+        });
+    });
 }
 
 // פונקציה לשמירה של מיקום, כתובת והערה ב-Local Storage
@@ -147,13 +174,11 @@ map.on('click', function(e) {
     });
 });
 
-// טיפול בלחיצה על כפתור "סמן על המפה"
+// טיפול בכפתור "סמן על המפה"
 document.getElementById('geocode-btn').addEventListener('click', function() {
     const address = document.getElementById('address-input').value;
-    const note = document.getElementById('note-input').value;
-    
     if (address) {
-        geocodeAddress(address, note);
+        searchAddress(address);
     } else {
         alert("אנא הכנס כתובת.");
     }
@@ -162,7 +187,6 @@ document.getElementById('geocode-btn').addEventListener('click', function() {
 // טיפול בכפתור לחיפוש כתובת
 document.getElementById('search-btn').addEventListener('click', function() {
     const searchAddressInput = document.getElementById('search-input').value;
-    
     if (searchAddressInput) {
         searchAddress(searchAddressInput);
     } else {
